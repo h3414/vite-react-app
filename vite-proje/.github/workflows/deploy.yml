@@ -1,1 +1,44 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to the 'main' branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code from GitHub
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step 2: Install dependencies and build the app (Vite)
+      - name: Install Dependencies and Build
+        run: |
+          npm install
+          npm run build
+
+      # Step 3: Deploy the build to the EC2 instance
+      - name: Deploy to EC2 via SCP
+        uses: appleboy/scp-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "./dist/"  # This is the build folder from Vite
+          target: "/var/www/myapp"  # Target folder on EC2 instance
+
+      # Step 4: Restart the app with PM2
+      - name: Restart PM2 and Application on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/myapp
+            npm install --production
+            pm2 restart myapp || pm2 start npm --name "myapp" -- start
 
