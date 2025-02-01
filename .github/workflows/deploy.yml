@@ -1,9 +1,9 @@
-name: Deploy to EC2
+name: Deploy Vite React App to EC2
 
 on:
   push:
     branches:
-      - main  # Trigger on push to the 'main' branch
+      - main # Trigger on push to the 'main' branch
 
 jobs:
   deploy:
@@ -27,25 +27,42 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "./dist/"  # This is the build folder from Vite
-          target: "/var/www/myapp"  # Target folder on EC2 instance
+          source: "./dist/" # Vite output directory
+          target: "/var/www/myapp" # Target folder on EC2 instance
 
-      # Step 4: Restart the app with PM2
-      - name: Restart PM2 and Application on EC2
+      # Step 4: Setup NGINX and PM2 (optional for full-stack apps)
+      - name: Setup NGINX and PM2 on EC2
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Install required packages for Amazon Linux 2
+            # Install required packages on EC2 (Amazon Linux 2)
             sudo yum update -y
-            sudo yum install -y nodejs npm git pm2
+            sudo yum install -y nginx pm2
 
-            # Change to the app directory and install production dependencies
+            # Start NGINX (serve static files)
+            sudo systemctl start nginx
+            sudo systemctl enable nginx
+
+            # Set NGINX config for serving React app (Vite)
+            sudo bash -c 'echo "
+            server {
+                listen 80;
+                server_name _;
+
+                root /var/www/myapp;
+                index index.html;
+
+                location / {
+                    try_files \$uri /index.html;
+                }
+            }" > /etc/nginx/conf.d/myapp.conf'
+
+            # Restart NGINX to apply the new configuration
+            sudo systemctl restart nginx
+
+            # Optional: Manage the app with PM2 (if you have a Node.js backend)
             cd /var/www/myapp
-            npm install --production
-
-            # Restart the app with PM2 or start it if not already running
             pm2 restart myapp || pm2 start npm --name "myapp" -- start
-
