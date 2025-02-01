@@ -23,7 +23,7 @@ function App() {
           thuisis count count is {count}
         </button>
         <p>
-          Edit <code>src/App.jsx</code> and save to test HMR updated
+          Edit <code>src/App.jsx</code> and save to test HMR updated latets
         </p>
       </div>
       <p className="read-the-docs">
