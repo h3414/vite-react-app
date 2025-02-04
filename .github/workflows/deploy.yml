@@ -1,68 +1,35 @@
-name: Deploy Vite React App to EC2
+name: Deploy to EC2 using AWS CodeDeploy
 
 on:
   push:
     branches:
-      - main # Trigger on push to the 'main' branch
+      - main # Change to your default branch if needed
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Checkout the code from GitHub
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v2
 
-      # Step 2: Install dependencies and build the app (Vite)
-      - name: Install Dependencies and Build
+      - name: Zip Application for Deployment
+        run: zip -r deploy.zip . -x "*.git*"
+
+      - name: Upload to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
         run: |
-          npm install
-          npm run build
+          aws s3 cp deploy.zip s3://my-app-bucket-123/deploy.zip
 
-      # Step 3: Deploy the build to the EC2 instance
-      - name: Deploy to EC2 via SCP
-        uses: appleboy/scp-action@v0.1.6
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "./dist/" # Vite output directory
-          target: "/var/www/myapp" # Target folder on EC2 instance
-
-      # Step 4: Setup NGINX and PM2 (optional for full-stack apps)
-      - name: Setup NGINX and PM2 on EC2
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            # Install required packages on EC2 (Amazon Linux 2)
-            sudo yum update -y
-            sudo yum install -y nginx pm2
-
-            # Start NGINX (serve static files)
-            sudo systemctl start nginx
-            sudo systemctl enable nginx
-
-            # Set NGINX config for serving React app (Vite)
-            sudo bash -c 'echo "
-            server {
-                listen 80;
-                server_name _;
-
-                root /var/www/myapp;
-                index index.html;
-
-                location / {
-                    try_files \$uri /index.html;
-                }
-            }" > /etc/nginx/conf.d/myapp.conf'
-
-            # Restart NGINX to apply the new configuration
-            sudo systemctl restart nginx
-
-            # Optional: Manage the app with PM2 (if you have a Node.js backend)
-            cd /var/www/myapp
-            pm2 restart myapp || pm2 start npm --name "myapp" -- start
+      - name: Trigger CodeDeploy Deployment
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+        run: |
+          aws deploy create-deployment \
+            --application-name MyApp-Deployment \
+            --deployment-group-name MyDeploymentGroup \
+            --s3-location bucket=my-app-bucket-123,key=deploy.zip,bundleType=zip
